@@ -26,23 +26,31 @@ def decide(a, b, labels):
     return labels[0] if a > b else labels[1]
 
 
-def normalize(label):
+def normalize(label, field="라벨"):
     labels = {"+": "Cross", "cross": "Cross", "x": "X"}
     if isinstance(label, str) and label.strip().lower() in labels:
         return labels[label.strip().lower()]
-    raise ValueError("알 수 없는 라벨 {!r}".format(label))
+    raise ValueError("{}: 알 수 없는 라벨 {!r}".format(field, label))
 
 
-def matrix(data, n):
+def matrix(data, n, field="행렬"):
     if not isinstance(data, list) or len(data) != n:
-        raise ValueError("행 개수 오류 (필요한 행 수 {})".format(n))
+        raise ValueError("{}: 행 개수 오류 (기대 {})".format(field, n))
     result = []
     for index, row in enumerate(data, 1):
         if not isinstance(row, list) or len(row) != n:
-            raise ValueError("{}행 열 개수 오류 (필요한 열 수 {})".format(index, n))
-        if any(type(v) not in (int, float) or not math.isfinite(v) for v in row):
-            raise ValueError("{}행에 유한한 숫자가 필요합니다.".format(index))
-        result.append([float(v) for v in row])
+            raise ValueError("{}: {}행 열 개수 오류 (기대 {})".format(field, index, n))
+        parsed = []
+        for col, value in enumerate(row, 1):
+            location = "{} ({}행 {}열)".format(field, index, col)
+            try:
+                valid = type(value) in (int, float) and math.isfinite(value)
+            except OverflowError:
+                valid = False
+            if not valid:
+                raise ValueError("{}: 유한한 숫자가 필요합니다.".format(location))
+            parsed.append(float(value))
+        result.append(parsed)
     return result
 
 
@@ -51,14 +59,21 @@ def read_matrix(name):
     rows = []
     while len(rows) < 3:
         tokens = input("{}행> ".format(len(rows) + 1)).split()
-        try:
-            row = [float(token) for token in tokens]
-            if len(row) == 3 and all(math.isfinite(v) for v in row):
-                rows.append(row)
-                continue
-        except ValueError:
-            pass
-        print("입력 형식 오류: 이 행에 유한한 숫자 3개를 공백으로 구분해 다시 입력하세요.")
+        if len(tokens) != 3:
+            print("입력 형식 오류: {}행에 {}개를 입력했습니다. 예: 0 1 0".format(len(rows) + 1, len(tokens)))
+            continue
+        row = []
+        for col, token in enumerate(tokens, 1):
+            try:
+                value = float(token)
+                if not math.isfinite(value):
+                    raise ValueError()
+            except ValueError:
+                print("입력 형식 오류: {}행 {}열의 {!r} 값은 유한한 숫자여야 합니다. 이 행을 다시 입력하세요.".format(len(rows) + 1, col, token))
+                break
+            row.append(value)
+        else:
+            rows.append(row)
     return rows
 
 
@@ -108,10 +123,10 @@ def load_filters(data):
                 raise ValueError("필터 묶음 누락 또는 형식 오류")
             normalized = {}
             for raw, values in pair.items():
-                label = normalize(raw)
+                label = normalize(raw, "filters." + key)
                 if label in normalized:
                     raise ValueError("중복 필터 " + label)
-                normalized[label] = matrix(values, n)
+                normalized[label] = matrix(values, n, "filters.{}.{}".format(key, raw))
             if set(normalized) != {"Cross", "X"}:
                 raise ValueError("Cross/X 필터가 모두 필요합니다.")
             filters[key] = normalized
@@ -124,7 +139,10 @@ def load_filters(data):
 
 def batch(path):
     with path.open(encoding="utf-8-sig") as stream:
-        data = json.load(stream)
+        try:
+            data = json.load(stream)
+        except json.JSONDecodeError as err:
+            raise ValueError("{} ({}행 {}열): {}".format(path, err.lineno, err.colno, err.msg)) from err
     if not isinstance(data, dict) or not isinstance(data.get("patterns"), dict):
         raise ValueError("patterns 객체가 필요합니다. 테스트를 집계할 수 없습니다.")
     filters, errors = load_filters(data.get("filters"))
@@ -140,20 +158,22 @@ def batch(path):
                 raise ValueError(group + ": " + errors.get(group, "대응 필터 없음"))
             if not isinstance(case, dict):
                 raise ValueError("패턴 항목은 객체여야 합니다.")
-            expected = normalize(case.get("expected"))
-            pattern = matrix(case.get("input"), int(match[2]))
+            expected = normalize(case.get("expected"), "patterns.{}.expected".format(key))
+            pattern = matrix(case.get("input"), int(match[2]), "patterns.{}.input".format(key))
             pair = filters[group]
             a, b = mac(pattern, pair["Cross"]), mac(pattern, pair["X"])
             print("Cross 점수: {} | X 점수: {}".format(a, b))
             result = decide(a, b, ("Cross", "X"))
             print("판정: {} | expected: {}".format(result, expected), end=" | ")
             if result != expected:
-                reason = "허용오차 내 동점" if result == "UNDECIDED" else "점수 순위와 라벨 불일치"
-                raise ValueError("{} (판정 {}, expected {})".format(reason, result, expected))
+                reason = "[tie] 허용오차 내 동점" if result == "UNDECIDED" else "[mismatch] 점수 순위와 라벨 불일치"
+                failures[key] = "{} (판정 {}, expected {})".format(reason, result, expected)
+                print("FAIL:", failures[key])
+                continue
             print("PASS")
         except (ValueError, OverflowError) as err:
-            failures[key] = str(err)
-            print("FAIL:", err)
+            failures[key] = "[invalid] {}".format(err)
+            print("FAIL:", failures[key])
     benchmark({n: generated_patterns(n) for n in SIZES})
     total = len(data["patterns"])
     print("\n총 테스트: {} | 통과: {} | 실패: {}".format(total, total-len(failures), len(failures)))
