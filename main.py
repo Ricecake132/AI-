@@ -6,7 +6,7 @@ from pathlib import Path
 from time import perf_counter_ns
 
 EPSILON = 1e-9
-REPEATS = 100
+REPEATS = 10
 SIZES = (3, 5, 13, 25)
 
 
@@ -75,6 +75,7 @@ def benchmark(samples):
     for n, (pattern, kernel) in samples.items():
         elapsed = 0
         for _ in range(REPEATS):
+            # 행렬 준비와 콘솔 출력은 제외하고 MAC 호출 한 번을 측정한다.
             start = perf_counter_ns()
             mac(pattern, kernel)
             elapsed += perf_counter_ns() - start
@@ -86,6 +87,7 @@ def manual():
     b = read_matrix("필터 B")
     print("필터 A, B 저장 완료")
     pattern = read_matrix("패턴")
+    # 사용자가 입력한 패턴에 두 필터를 적용하는 구간을 측정한다.
     start = perf_counter_ns()
     first, second = mac(pattern, a), mac(pattern, b)
     elapsed = (perf_counter_ns() - start) / 1e6
