@@ -72,6 +72,8 @@ A 점수는 1.0, B 점수는 5.0이므로 판정은 B다. 마지막 세 줄을 �
 
 ### 한 필터의 점수는 어떻게 만들어지는가?
 
+![입력 X와 필터 B(X)의 같은 칸을 곱하면 행별 합은 2, 1, 2이고 최종 MAC 점수는 5점이다.](docs/images/mac-x-example.png)
+
 ```python
 def mac(pattern, kernel):
     total = 0.0
