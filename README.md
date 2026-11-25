@@ -8,6 +8,11 @@
 
 입력 X는 필터 B와 다섯 칸이 겹친다. 아래 행별 계산표에서 B의 점수 5가 어떻게 나왔는지 확인할 수 있다(2 + 1 + 2).
 
+| A · 십자가 필터 | B · X 필터 | C · 입력 패턴 |
+|:---:|:---:|:---:|
+| ![필터 A의 십자가 격자](docs/screenshots/filter-a.png) | ![필터 B의 X 격자](docs/screenshots/filter-b.png) | ![두 필터에 대조할 입력 X 격자](docs/screenshots/input-c.png) |
+| C와 가운데 한 칸이 겹쳐 **1점** | C와 다섯 칸이 겹쳐 **5점** | 같은 입력 C를 A, B에 각각 적용해 **B로 판정** |
+
 <details>
 <summary>JSON 분석 결과 6건 보기</summary>
 
